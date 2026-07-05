@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}DICOM Network Monitor{% endblock %} - DICOM Lab</title>
+<style>
+  :root { --teal:#0e6e6e; --bg:#f4f6f8; --border:#d5dbe1; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+         margin: 0; background: var(--bg); color: #1e2933; }
+  header { background: var(--teal); color: #fff; padding: 0.7rem 1.2rem;
+           display: flex; align-items: baseline; gap: 1.2rem; }
+  header h1 { font-size: 1.1rem; margin: 0; }
+  header .sub { font-size: 0.8rem; opacity: 0.85; }
+  main { max-width: 1180px; margin: 1.2rem auto; padding: 0 1rem; }
+  .card { background: #fff; border: 1px solid var(--border); border-radius: 6px;
+          padding: 1rem 1.2rem; margin-bottom: 1rem; }
+  h2 { margin-top: 0; font-size: 1.05rem; color: var(--teal); }
+  label { display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 0.2rem; }
+  select { padding: 0.4rem 0.5rem; border: 1px solid var(--border);
+           border-radius: 4px; font-size: 0.9rem; background: #fff; }
+  button { background: var(--teal); color: #fff; border: 0; border-radius: 4px;
+           padding: 0.55rem 1.4rem; font-size: 0.95rem; cursor: pointer; }
+  button:hover { filter: brightness(1.1); }
+  button:disabled { background: #9db4b4; cursor: not-allowed; }
+  button.danger { background: #a33030; }
+  code { background: #eef2f6; padding: 0.1rem 0.3rem; border-radius: 3px;
+         font-size: 0.85em; overflow-wrap: anywhere; }
+  .hint { font-size: 0.78rem; color: #5c6b78; margin-top: 0.15rem; }
+  .banner-error { background: #fbe4e4; border: 1px solid #e3b3b3; color: #a33030;
+                  border-radius: 6px; padding: 0.7rem 1rem; margin-bottom: 1.2rem; }
+  .banner-warn  { background: #fdf3d7; border: 1px solid #e3d3a3; color: #8a6d1a;
+                  border-radius: 6px; padding: 0.7rem 1rem; margin-bottom: 1.2rem; }
+  .banner-info  { background: #e3edf7; border: 1px solid #b3cbe3; color: #1c5d99;
+                  border-radius: 6px; padding: 0.7rem 1rem; margin-bottom: 1.2rem; }
+  .explain { background: #f0f7f7; border-left: 4px solid var(--teal);
+             padding: 0.6rem 0.9rem; font-size: 0.85rem; color: #2c4a4a;
+             margin: 0 0 1rem; border-radius: 0 4px 4px 0; }
+</style>
+{% block styles %}{% endblock %}
+</head>
+<body>
+<header>
+  <h1>DICOM Network Monitor</h1>
+  <span class="sub">passive tshark-powered timeline of DICOM conversations</span>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+{% block scripts %}{% endblock %}
+</body>
+</html>

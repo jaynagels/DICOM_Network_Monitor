@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+{% block styles %}
+<style>
+  .topbar { display: flex; gap: 1.2rem; align-items: flex-end; flex-wrap: wrap; }
+  .topbar .grow { flex: 1; min-width: 260px; }
+  .filterline { margin-top: 0.6rem; font-size: 0.82rem; color: #5c6b78; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+         background: #9db4b4; margin-right: 0.4rem; }
+  .dot.on { background: #1e7b34; box-shadow: 0 0 4px #1e7b34; }
+  .assoc { border: 1px solid var(--border); border-radius: 6px;
+           margin-bottom: 0.8rem; background: #fff; }
+  .assoc > summary { cursor: pointer; padding: 0.55rem 0.9rem; display: flex;
+                     gap: 0.7rem; align-items: baseline; flex-wrap: wrap;
+                     background: #eef2f6; border-radius: 6px; font-size: 0.88rem; }
+  .assoc[open] > summary { border-bottom: 1px solid var(--border);
+                           border-radius: 6px 6px 0 0; }
+  .assoc > summary::-webkit-details-marker { display: none; }
+  .assoc .num { font-weight: 700; color: var(--teal); }
+  .assoc .aes { font-weight: 600; }
+  .assoc .peers { color: #5c6b78; font-size: 0.8rem; }
+  .assoc .ops { font-size: 0.78rem; color: #4a3a8a; }
+  .chip { display: inline-block; padding: 0.1rem 0.55rem; border-radius: 10px;
+          font-size: 0.75rem; font-weight: 600; margin-left: auto; }
+  .chip.info    { background: #e3edf7; color: #1c5d99; }
+  .chip.ok      { background: #e2f3e5; color: #1e7b34; }
+  .chip.pending { background: #fdf3d7; color: #8a6d1a; }
+  .chip.warn    { background: #fdf3d7; color: #8a6d1a; }
+  .chip.fail    { background: #fbe4e4; color: #a33030; }
+  .movelink { background: #e8e3f7; color: #4a3a8a; padding: 0.1rem 0.55rem;
+              border-radius: 10px; font-size: 0.75rem; font-weight: 600; }
+  .events { padding: 0.4rem 0.9rem 0.6rem; }
+  .ev { display: flex; gap: 0.7rem; padding: 0.22rem 0; font-size: 0.85rem;
+        border-bottom: 1px dotted #edf1f4; align-items: baseline; }
+  .ev:last-child { border-bottom: 0; }
+  .ev .ts { color: #8a97a3; font-family: Consolas, Menlo, monospace;
+            font-size: 0.75rem; white-space: nowrap; }
+  .ev .txt { flex: 1; }
+  .ev.ok .txt { color: #1e7b34; }
+  .ev.pending .txt { color: #8a6d1a; }
+  .ev.warn .txt { color: #8a6d1a; font-weight: 600; }
+  .ev.fail .txt { color: #a33030; font-weight: 600; }
+  .ev .details { margin: 0.15rem 0 0; padding-left: 1rem; color: #5c6b78;
+                 font-size: 0.8rem; font-weight: 400; }
+  .sysline { font-size: 0.8rem; color: #5c6b78; font-style: italic;
+             padding: 0.25rem 0.4rem; }
+  .sysline.fail { color: #a33030; font-weight: 600; font-style: normal; }
+  .toolrow { display: flex; gap: 1rem; align-items: center;
+             margin-bottom: 0.8rem; flex-wrap: wrap; }
+  .toolrow .spacer { flex: 1; }
+  .toolrow a { color: var(--teal); font-size: 0.85rem; }
+  .empty { color: #5c6b78; font-style: italic; padding: 0.6rem 0.2rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if not status.tshark %}
+<div class="banner-error">
+  <b>tshark was not found.</b> This tool needs Wireshark's command-line engine.
+  Install Wireshark from wireshark.org (tshark is included), or edit
+  <code>TSHARK_PATH</code> in <code>config.py</code>
+  (currently <code>{{ status.tshark_configured }}</code>) and restart.
+</div>
+{% elif not status.interfaces %}
+<div class="banner-error">
+  <b>No capture interfaces are visible.</b> On Windows this almost always
+  means the monitor is not running as Administrator. Close this app and
+  run <code>start-monitor.bat</code> elevated (right-click, "Run as
+  administrator"). Detail from tshark: <code>{{ status.interface_error }}</code>
+</div>
+{% elif status.is_admin == false %}
+<div class="banner-warn">
+  <b>Not running as Administrator.</b> Interfaces are visible, so capture may
+  still work with your Npcap settings, but if starting a capture fails,
+  re-launch <code>start-monitor.bat</code> elevated.
+</div>
+{% endif %}
+
+{% if status.tshark and status.interfaces and not status.loopback_present %}
+<div class="banner-warn">
+  <b>No Npcap Loopback Adapter found.</b> Watching two DICOM apps on this
+  same box talking over 127.0.0.1 will not work. To fix it, reinstall Npcap
+  (or Wireshark) with <b>"Support loopback traffic"</b> ticked, then restart
+  this app. Capturing traffic to the Linux server still works fine without it.
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="topbar">
+    <div class="grow">
+      <label for="iface">Capture interface</label>
+      <select id="iface" style="width:100%">
+        {% for i in status.interfaces %}
+        <option value="{{ i.index }}">{{ i.index }}. {{ i.name }}</option>
+        {% endfor %}
+      </select>
+      <div class="hint" id="ifacehint"></div>
+    </div>
+    <div>
+      <button id="togglebtn" {% if not status.interfaces %}disabled{% endif %}>
+        Start capture</button>
+    </div>
+    <div style="min-width:140px">
+      <span class="dot" id="dot"></span><span id="capstate">idle</span>
+      <div class="hint"><span id="pkts">0</span> packets seen</div>
+    </div>
+  </div>
+  <div class="filterline">
+    Watching: <code>{{ status.filter }}</code>
+    &nbsp;|&nbsp; DICOM ports {{ status.ports | join(", ") }}
+    {% if status.focus_hosts %}
+    &nbsp;|&nbsp; focused on hosts {{ status.focus_hosts | join(", ") }}
+    {% endif %}
+    &nbsp;|&nbsp; edit <code>config.py</code> to change
+  </div>
+</div>
+
+<div class="explain">
+  Each box below is one DICOM <b>association</b> (one TCP conversation).
+  Open a box to read its story: who called whom, what was negotiated, every
+  DIMSE message, and every status in plain English. C-MOVE retrieves are
+  linked to the return association the archive opens to deliver the images.
+</div>
+
+<div class="toolrow">
+  <label style="margin:0"><input type="checkbox" id="follow" checked>
+    follow newest activity</label>
+  <span class="spacer"></span>
+  <a href="/download">download session log</a>
+  <span class="hint">also on disk: <code>{{ status.log_path }}</code></span>
+</div>
+
+<div id="timeline">
+  <div class="empty" id="emptymsg">No DICOM traffic seen yet. Start a capture,
+  then make two DICOM nodes talk (try a C-ECHO first).</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const HINTS = {{ status.interfaces | tojson }};
+let after = 0;
+let capturing = {{ "true" if status.capturing else "false" }};
+
+const ifaceSel = document.getElementById("iface");
+const hintEl = document.getElementById("ifacehint");
+function showHint() {
+  const opt = HINTS.find(i => i.index === ifaceSel.value);
+  hintEl.textContent = opt ? opt.hint : "";
+}
+if (HINTS.length) { showHint(); ifaceSel.addEventListener("change", showHint); }
+
+const btn = document.getElementById("togglebtn");
+function paintCapture() {
+  document.getElementById("dot").className = capturing ? "dot on" : "dot";
+  document.getElementById("capstate").textContent =
+    capturing ? "capturing" : "idle";
+  btn.textContent = capturing ? "Stop capture" : "Start capture";
+  btn.className = capturing ? "danger" : "";
+  ifaceSel.disabled = capturing;
+}
+paintCapture();
+
+btn.addEventListener("click", async () => {
+  btn.disabled = true;
+  try {
+    if (capturing) {
+      await fetch("/api/capture/stop", {method: "POST"});
+      capturing = false;
+    } else {
+      const resp = await fetch("/api/capture/start", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({interface: ifaceSel.value}),
+      });
+      if (resp.ok) { capturing = true; }
+      else {
+        const err = await resp.json();
+        alert("Could not start capture:\n" + (err.error || resp.statusText));
+      }
+    }
+  } finally {
+    btn.disabled = false;
+    paintCapture();
+  }
+});
+
+const timelineEl = document.getElementById("timeline");
+const cards = {};   // assoc id -> {card, events, chip, ops, aes}
+
+function assocCard(id) {
+  if (cards[id]) return cards[id];
+  document.getElementById("emptymsg")?.remove();
+  const card = document.createElement("details");
+  card.className = "assoc";
+  card.open = true;
+  card.innerHTML = `<summary>
+      <span class="num">#${id}</span>
+      <span class="aes"></span>
+      <span class="peers"></span>
+      <span class="ops"></span>
+      <span class="movelink" style="display:none"></span>
+      <span class="chip info">open</span>
+    </summary><div class="events"></div>`;
+  timelineEl.appendChild(card);
+  cards[id] = {
+    card,
+    events: card.querySelector(".events"),
+    aes: card.querySelector(".aes"),
+    peers: card.querySelector(".peers"),
+    ops: card.querySelector(".ops"),
+    movelink: card.querySelector(".movelink"),
+    chip: card.querySelector(".chip"),
+  };
+  return cards[id];
+}
+
+function addEvent(ev) {
+  let target;
+  if (ev.assoc === null) {
+    const line = document.createElement("div");
+    line.className = "sysline " + ev.kind;
+    line.textContent = `${ev.ts}  ${ev.text}`;
+    timelineEl.appendChild(line);
+    target = line;
+  } else {
+    const c = assocCard(ev.assoc);
+    const row = document.createElement("div");
+    row.className = "ev " + ev.kind;
+    let html = `<span class="ts">${ev.ts}</span><span class="txt"></span>`;
+    row.innerHTML = html;
+    row.querySelector(".txt").textContent = ev.text;
+    for (const d of ev.details || []) {
+      const det = document.createElement("div");
+      det.className = "details";
+      det.textContent = "↳ " + d;
+      row.querySelector(".txt").appendChild(det);
+    }
+    c.events.appendChild(row);
+    target = c.card;
+  }
+  if (document.getElementById("follow").checked) {
+    target.scrollIntoView({block: "end", behavior: "instant"});
+  }
+}
+
+const STATE_KIND = {rejected: "fail", aborted: "fail", reset: "warn",
+                    established: "ok", released: "info", closed: "info"};
+function updateAssoc(a) {
+  const c = assocCard(a.id);
+  c.aes.textContent = a.aes;
+  c.peers.textContent = a.peers;
+  c.ops.textContent = a.ops;
+  if (a.move_link) {
+    c.movelink.style.display = "";
+    c.movelink.textContent = "return assoc for C-MOVE #" + a.move_link;
+  }
+  const kind = a.worst === "fail" || a.worst === "warn"
+    ? a.worst : (STATE_KIND[a.state] || "info");
+  c.chip.className = "chip " + kind;
+  c.chip.textContent = a.state;
+}
+
+async function poll() {
+  try {
+    const resp = await fetch("/api/events?after=" + after);
+    const data = await resp.json();
+    for (const ev of data.events) { addEvent(ev); after = ev.seq; }
+    for (const a of data.assocs) { updateAssoc(a); }
+    if (data.seq > after) after = data.seq;
+    document.getElementById("pkts").textContent = data.packets;
+    if (data.capturing !== capturing) { capturing = data.capturing; paintCapture(); }
+  } catch (e) { /* server restarting; keep trying */ }
+  setTimeout(poll, 1000);
+}
+poll();
+</script>
+{% endblock %}

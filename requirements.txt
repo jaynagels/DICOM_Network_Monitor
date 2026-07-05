@@ -1,0 +1,11 @@
+# DICOM Network Monitor - Python dependencies
+#
+# Install with:
+#   pip install -r requirements.txt
+#
+# Python 3.9+ required. Capture and dissection are done by tshark
+# (installed with Wireshark), not by a Python package.
+
+fastapi>=0.110          # web UI
+uvicorn>=0.29           # ASGI server
+jinja2>=3.1             # server-rendered templates
