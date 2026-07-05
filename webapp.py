@@ -53,6 +53,8 @@ def gather_status():
         else None,
         "filter": manager.filter_text,
         "packets": manager.packets,
+        "raw_lines": manager.raw_lines,
+        "capture_error": manager.last_error,
         "ports": config.DICOM_PORTS,
         "focus_hosts": config.FOCUS_HOSTS,
         "log_path": str(Path(config.LOG_PATH).resolve()),

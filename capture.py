@@ -165,7 +165,8 @@ class CaptureManager:
         self._lock = threading.Lock()
         self.interface = None      # dict from list_interfaces
         self.filter_text = build_bpf()
-        self.packets = 0
+        self.packets = 0           # lines ekparse accepted as packets
+        self.raw_lines = 0         # every stdout line tshark emitted
         self.last_error = ""
 
     @property
@@ -196,6 +197,7 @@ class CaptureManager:
                 return self.last_error
             self.interface = interface
             self.packets = 0
+            self.raw_lines = 0
             self.last_error = ""
             threading.Thread(target=self._pump_stdout, daemon=True).start()
             threading.Thread(target=self._pump_stderr, daemon=True).start()
@@ -237,6 +239,13 @@ class CaptureManager:
         if not proc or not proc.stdout:
             return
         for line in proc.stdout:
+            # raw_lines vs packets is the first diagnostic split: raw stuck
+            # at 0 means tshark emitted nothing (capture/dissection side);
+            # raw counting up while packets stays 0 means ekparse rejects
+            # what arrives (parse side). Both are visible in /api/status.
+            self.raw_lines += 1
+            if self.raw_lines == 1:
+                logger.info("first tshark stdout line: %.200s", line.strip())
             pkt = ekparse.parse_ek_line(line)
             if pkt is None:
                 continue

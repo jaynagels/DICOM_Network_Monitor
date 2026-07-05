@@ -98,6 +98,23 @@ ready to attach to a bug report.
 All tunables are at the top of `config.py`: web port, tshark path, DICOM
 ports, focus hosts, event buffer size, log path. Edit, restart, done.
 
+## Troubleshooting: capture runs but 0 packets appear
+
+"0 packets" only tells you the end of the pipeline was empty; the cause
+can be in capture, dissection, ek output, or parsing. Two tools pinpoint
+the layer instead of guessing:
+
+- While a capture is running, open <http://127.0.0.1:8090/api/status>:
+  `raw_lines` counts every line tshark emitted, `packets` counts the ones
+  the parser accepted. `raw_lines` stuck at 0 means tshark saw nothing
+  (capture/dissection side); `raw_lines` climbing while `packets` stays 0
+  means the parser is rejecting output (parse side). The session log also
+  records the exact tshark argv at every capture start.
+- `python tools\diagnose_capture.py --interface <n>` (elevated) runs one
+  gate per pipeline layer, from a minimal capture up to the app's exact
+  command, and names the first layer that fails plus the minimal fix.
+  See the docstring in that file for the gate-by-gate meaning.
+
 ## Running as a Windows service
 
 See `deploy/nssm-service.md`. Short version: fine for the web UI, but the
