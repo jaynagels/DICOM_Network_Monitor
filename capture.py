@@ -62,11 +62,41 @@ def _interface_hint(name, desc):
     return "watches traffic passing through this adapter"
 
 
+# One tshark -D line: index, device token, optional friendly label in parens.
+# The device token is what tshark's -i argument needs; it comes in three
+# shapes on Windows and must never be confused with the friendly label:
+#   1. \Device\NPF_{FF716D9F-6EF9-4123-A2EF-EB9A23C5B76B} (Local Area Connection* 9)
+#   5. \Device\NPF_Loopback (Adapter for loopback traffic capture)
+#   6. etwdump (Event Tracing for Windows (ETW) reader)
+_IFACE_LINE_RE = re.compile(r"^(\d+)\.\s+(\S+)(?:\s+\((.*)\))?\s*$")
+
+
+def parse_interface_lines(text):
+    """Parse tshark -D output into interface dicts.
+
+    Each dict: index (display ordinal only, can shift across reboots),
+    device (the token to pass to tshark -i), name (friendly label for
+    humans), hint. Kept as a pure function so it can be tested against
+    captured -D output without running tshark.
+    """
+    interfaces = []
+    for line in text.splitlines():
+        m = _IFACE_LINE_RE.match(line.strip())
+        if not m:
+            continue
+        index, device, label = m.group(1), m.group(2), m.group(3) or ""
+        interfaces.append({
+            "index": index,
+            "device": device,
+            "name": label or device,
+            "hint": _interface_hint(device, label),
+        })
+    return interfaces
+
+
 def list_interfaces(tshark):
     """Run tshark -D. Returns (interfaces, error_text).
 
-    interfaces: [{"index": "1", "id": r"\\Device\\NPF_{...}", "name": "Ethernet",
-                  "hint": "..."}]
     An empty list with error text usually means: not running as Administrator
     (Npcap only shows adapters to elevated processes by default).
     """
@@ -75,19 +105,7 @@ def list_interfaces(tshark):
                               timeout=30)
     except Exception as exc:
         return [], f"could not run tshark -D: {exc}"
-    interfaces = []
-    for line in proc.stdout.splitlines():
-        m = re.match(r"^(\d+)\.\s+(\S+)(?:\s+\((.*)\))?\s*$", line.strip())
-        if not m:
-            continue
-        index, dev_id, desc = m.group(1), m.group(2), m.group(3) or ""
-        display = desc or dev_id
-        interfaces.append({
-            "index": index,
-            "id": dev_id,
-            "name": display,
-            "hint": _interface_hint(dev_id, desc),
-        })
+    interfaces = parse_interface_lines(proc.stdout)
     error = ""
     if not interfaces:
         error = (proc.stderr.strip()
@@ -96,7 +114,7 @@ def list_interfaces(tshark):
 
 
 def has_loopback(interfaces):
-    return any("loopback" in f"{i['id']} {i['name']}".lower()
+    return any("loopback" in f"{i['device']} {i['name']}".lower()
                for i in interfaces)
 
 
@@ -115,13 +133,17 @@ _DISPLAY_FILTER = ("dicom || (tcp.flags.syn==1 && tcp.flags.ack==0) "
                    "|| tcp.flags.fin==1 || tcp.flags.reset==1")
 
 
-def build_command(tshark, interface_id=None, read_file=None):
+def build_command(tshark, interface_device=None, read_file=None):
     cmd = [tshark]
     if read_file:
         cmd += ["-r", read_file]
     else:
+        # -i takes the DEVICE token (\Device\NPF_{...}), never the friendly
+        # label: on Windows a label like "Ethernet 3" makes tshark capture
+        # nothing, silently. The numeric index would work too but can shift
+        # across reboots, so the device name is the stable choice.
         # -p: no promiscuous mode; we only watch this box's own conversations
-        cmd += ["-i", interface_id, "-p", "-f", build_bpf()]
+        cmd += ["-i", interface_device, "-p", "-f", build_bpf()]
     for port in config.DICOM_PORTS:
         cmd += ["-d", f"tcp.port=={port},dicom"]
     cmd += [
@@ -155,9 +177,11 @@ class CaptureManager:
         with self._lock:
             if self.running:
                 return "capture already running"
-            cmd = build_command(tshark, interface and interface["id"],
+            cmd = build_command(tshark, interface and interface["device"],
                                 read_file)
-            logger.info("starting: %s", " ".join(cmd))
+            # Log the exact argv: if -i ever gets the wrong value again, it
+            # must be visible here instead of presenting as "0 packets".
+            logger.info("starting tshark, argv: %r", cmd)
             creationflags = 0
             if sys.platform == "win32":
                 creationflags = subprocess.CREATE_NO_WINDOW
@@ -186,9 +210,13 @@ class CaptureManager:
             self._proc = None
             return error
 
-        where = interface["name"] if interface else read_file
+        if interface:
+            where = f"'{interface['name']}' (device {interface['device']})"
+        else:
+            where = f"'{read_file}'"
         self.monitor.session_event(
-            f"Capture started on '{where}' with filter: {self.filter_text}")
+            f"Capture started on {where} with filter: {self.filter_text}")
+        self.monitor.session_event(f"tshark argv: {cmd!r}")
         return ""
 
     def stop(self):

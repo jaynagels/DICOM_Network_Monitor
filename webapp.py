@@ -88,10 +88,12 @@ async def api_start(request: Request):
             return JSONResponse({"error": error}, status_code=500)
         return {"ok": True}
 
+    # The browser sends the device token (\Device\NPF_{...}); the numeric
+    # index is accepted only as a fallback since it can shift across reboots.
     wanted = str(body.get("interface", ""))
     interfaces, iface_error = capture.list_interfaces(TSHARK)
-    chosen = next((i for i in interfaces if i["index"] == wanted
-                   or i["id"] == wanted), None)
+    chosen = next((i for i in interfaces if i["device"] == wanted), None) \
+        or next((i for i in interfaces if i["index"] == wanted), None)
     if chosen is None:
         return JSONResponse(
             {"error": iface_error or f"unknown interface: {wanted}"},

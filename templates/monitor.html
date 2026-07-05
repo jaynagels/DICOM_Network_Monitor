@@ -89,8 +89,9 @@
     <div class="grow">
       <label for="iface">Capture interface</label>
       <select id="iface" style="width:100%">
+        {# label is for humans; the value is the device token tshark needs #}
         {% for i in status.interfaces %}
-        <option value="{{ i.index }}">{{ i.index }}. {{ i.name }}</option>
+        <option value="{{ i.device }}">{{ i.index }}. {{ i.name }}</option>
         {% endfor %}
       </select>
       <div class="hint" id="ifacehint"></div>
@@ -144,7 +145,7 @@ let capturing = {{ "true" if status.capturing else "false" }};
 const ifaceSel = document.getElementById("iface");
 const hintEl = document.getElementById("ifacehint");
 function showHint() {
-  const opt = HINTS.find(i => i.index === ifaceSel.value);
+  const opt = HINTS.find(i => i.device === ifaceSel.value);
   hintEl.textContent = opt ? opt.hint : "";
 }
 if (HINTS.length) { showHint(); ifaceSel.addEventListener("change", showHint); }
